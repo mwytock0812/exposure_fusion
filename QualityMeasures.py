@@ -51,28 +51,25 @@ class QualityMeasures:
         exposedness = [weigh_intensities(i) for i in rgb_images]
         return exposedness
 
-    def get_weights(self, contrast, saturation, exposedness,
-                        w_con=1, w_sat=1, w_exp=1):
-        def compute_W(contrast, saturation, exposedness, w_con, w_sat, w_exp):
-            W = (contrast ** w_con) * \
-                (saturation ** w_sat) * \
-                (exposedness ** w_exp)
-            return W
+    def compute_W(self, contrast, saturation, exposedness, w_con, w_sat, w_exp):
+        W = (contrast ** w_con) * (saturation ** w_sat) * (exposedness ** w_exp)
+        return W
 
-        weight_list = [compute_W(contrast[i],
-                                 saturation[i],
-                                 exposedness[i],
-                                 w_con,
-                                 w_sat,
-                                 w_exp) for i in range(len(contrast))]
+    def get_weights(self, contrast, saturation, exposedness,
+                    w_con=1, w_sat=1, w_exp=1):
+        weight_list = [self.compute_W(contrast[i],
+                                      saturation[i],
+                                      exposedness[i],
+                                      w_con,
+                                      w_sat,
+                                      w_exp) for i in range(len(contrast))]
+
+        qm_stack = np.concatenate([i[..., np.newaxis] for i in weight_list], axis=2)
+        inverted_weights = qm_stack.sum(axis=2) ** -1
+
         norm_weight_list = []
         for k in range(len(weight_list)):
-            W_ijk = weight_list[k]
-            for k_prime in range(len(weight_list)):
-                if weight_list[k_prime] == 0:
-                W_ijk *= np.where(weight_list[k_prime] == 0, 0,
-                                  weight_list[k_prime] ** -1)
-            norm_weight_list.append(W_ijk)
+            norm_weight_list.append(inverted_weights * weight_list[k])
 
         return norm_weight_list
 
