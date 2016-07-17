@@ -4,7 +4,7 @@ import numpy as np
 
 class QualityMeasures:
     def __init__(self, rgb_images, gray_images, rgb_stack, gray_stack):
-        """Generates quality measures from a list of float32 images.
+        """Generates quality measures and weights from a list of float32 images.
 
         The RGB image stack is concatenated along axis=3, while gray is
         concatenated along axis=2.
@@ -19,19 +19,26 @@ class QualityMeasures:
                                         self.exposedness)
 
         self.naive_result = self.get_result(self.weights, rgb_images)
-
+        import pdb
+        pdb.set_trace()
 
     def get_contrast(self, gray_images):
         """
 
         Note: This returns a gray image with only one channel.
         """
-        gaussian_blur = [cv2.GaussianBlur(g, (3, 3), 0) for g in gray_images]
-        laplacian = [cv2.Laplacian(gb, ddepth=cv2.CV_32F, ksize=3,
+        # Unsure whether to blur first
+        # gaussian_blur = [cv2.GaussianBlur(g, (3, 3), 0) for g in gray_images]
+        # laplacian = [cv2.Laplacian(gb, ddepth=cv2.CV_32F, ksize=3,
+        #                            borderType=cv2.BORDER_REFLECT101)
+        #              for gb in gaussian_blur]
+
+        laplacian = [cv2.Laplacian(g, ddepth=cv2.CV_32F, ksize=3,
                                    borderType=cv2.BORDER_REFLECT101)
-                     for gb in gaussian_blur]
+                     for g in gray_images]
         abs_laplacian = [np.absolute(l) for l in laplacian]
-        return abs_laplacian
+        normed_lapl = [l / l.max() for l in abs_laplacian]
+        return normed_lapl
 
     def get_saturation(self, rgb_images):
         """
