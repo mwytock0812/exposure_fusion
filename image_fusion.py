@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import QualityMeasures as qm
+import ImageBlender as ib
 
 from glob import glob
 
@@ -50,8 +51,8 @@ if __name__ == "__main__":
     gray_stack = np.concatenate([g[..., np.newaxis] for g in gray_images], axis=2)
 
     quality = qm.QualityMeasures(rgb_images, gray_images, rgb_stack, gray_stack)
+    blend = ib.ImageBlender(rgb_images, quality.weights)
 
-    cv2.pyrUp(rgb_images[0])
     import pdb
     pdb.set_trace()
     # fused = np.median(rgb_stack, axis=3)

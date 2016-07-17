@@ -15,11 +15,11 @@ class QualityMeasures:
         self.exposedness = self.get_exposedness(rgb_images)
 
         self.weights = self.get_weights(self.contrast,
-                                            self.saturation,
-                                            self.exposedness)
+                                        self.saturation,
+                                        self.exposedness)
 
-        # TODO: Test by calculating result
-        ## Multiply weights by corresponding images
+        self.naive_result = self.get_result(self.weights, rgb_images)
+
 
     def get_contrast(self, gray_images):
         """
@@ -73,5 +73,12 @@ class QualityMeasures:
 
         return norm_weight_list
 
-    # def get_result(self, images, weights):
-    #     for channel in range(3):
+    def get_result(self, weights, images):
+        results = []
+        for i in range(len(images)):
+            output = np.zeros(shape=images[i].shape)
+            output = weights[i][:, :, np.newaxis] * images[i]
+            results.append(output)
+        result_stack = np.concatenate([i[..., np.newaxis] for i in results], axis=3)
+        result = result_stack.sum(axis=3)
+        return result
