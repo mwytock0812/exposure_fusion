@@ -7,7 +7,7 @@ import ImageBlender as ib
 from glob import glob
 
 
-def readImages(image_dir, ext_list=[], resize=False):
+def readImages(image_dir, ext_list=[], resize=False, dtype="float32"):
     """ This function reads in input images from a image directory
 
     Args:
@@ -23,7 +23,6 @@ def readImages(image_dir, ext_list=[], resize=False):
     Returns:
         images(list): List of images in image_dir. Each image in the list is of
                       type numpy.ndarray.
-
     """
     # The main file extensions. Feel free to add more if you want to test an
     # image format of yours that is not listed (Make sure OpenCV can read it).
@@ -32,26 +31,31 @@ def readImages(image_dir, ext_list=[], resize=False):
     image_files = sorted(reduce(list.__add__, map(glob, search_paths)))
     images = [cv2.imread(f, cv2.IMREAD_UNCHANGED | cv2.IMREAD_COLOR)
               for f in image_files]
-    images = [i * 1./255 for i in images]
-    images = [np.float32(i) for i in images]
-
     if resize:
         images = [img[::4, ::4] for img in images]
 
-    return images
+    if dtype == "float32":
+        float32_images = [i * 1./255 for i in images]
+        float32_images = [np.float32(i) for i in images]
+        return float32_images
+    else:
+        return images
 
 
 if __name__ == "__main__":
     np.random.seed()
     image_dir = "input"
-    rgb_images = readImages(image_dir, resize=False)
-    gray_images = [cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in rgb_images]
+    float32_rgb_images = readImages(image_dir, resize=False)
+    uint8_rgb_images = readImages(image_dir, resize=False, dtype="uint8")
+    gray_images = [cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in float32_rgb_images]
 
-    rgb_stack = np.concatenate([i[..., np.newaxis] for i in rgb_images], axis=3)
+    rgb_stack = np.concatenate([i[..., np.newaxis] for i in float32_rgb_images], axis=3)
     gray_stack = np.concatenate([g[..., np.newaxis] for g in gray_images], axis=2)
 
-    quality = qm.QualityMeasures(rgb_images, gray_images, rgb_stack, gray_stack)
-    blend = ib.ImageBlender(rgb_images, quality.weights)
+    quality = qm.QualityMeasures(float32_rgb_images, gray_images)
+
+    # Use uint8 images instead
+    blend = ib.ImageBlender(uint8_rgb_images, quality.weights)
 
     import pdb
     pdb.set_trace()
