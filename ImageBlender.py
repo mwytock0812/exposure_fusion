@@ -50,7 +50,7 @@ class ImageBlender:
         return gaussian_pyramids
 
     def laplacian_pyramid(self, gauss_pyramids):
-        """Consgructs a set of Laplacian pyramids.
+        """Constructs a set of Laplacian pyramids.
         pyramids: A list of pyramids (which are themselves lists).
 
         returns: List of lists with the outer list indices corresponding
@@ -74,11 +74,14 @@ class ImageBlender:
         num_levels = len(gauss_pyr_weights[0])
         result_pyramid = []
         for l in range(num_levels):
-            result = []
+            level = []
             for i in range(num_images):
-                result.append(gauss_pyr_weights[i][l][..., np.newaxis] * lapl_pyr_images[i][l])
-            result_stack = np.concatenate([i[..., np.newaxis] for i in result], axis=3)
-            result_pyramid.append(result_stack.sum(axis=3))
+                level.append(gauss_pyr_weights[i][l][..., np.newaxis] * lapl_pyr_images[i][l])
+            level_stack = np.concatenate([i[..., np.newaxis] for i in level], axis=3)
+            result = level_stack.sum(axis=3)
+            result[result > 255] = 255
+            result = np.uint8(result)
+            result_pyramid.append(result)
         return result_pyramid
 
     def collapse(self, pyramid):
