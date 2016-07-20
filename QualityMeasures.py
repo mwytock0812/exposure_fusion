@@ -3,7 +3,7 @@ import numpy as np
 
 
 class QualityMeasures:
-    def __init__(self, rgb_images, gray_images, rgb_stack, gray_stack):
+    def __init__(self, rgb_images, gray_images):
         """Generates quality measures and weights from a list of float32 images.
 
         The RGB image stack is concatenated along axis=3, while gray is
@@ -19,8 +19,13 @@ class QualityMeasures:
                                         self.exposedness)
 
         self.naive_result = self.get_result(self.weights, rgb_images)
-        import pdb
-        pdb.set_trace()
+
+    def normalize_image_list(self, image_list):
+        axes = len(image_list[0].shape)
+        stack = np.concatenate([i[..., np.newaxis] for i in image_list], axis=axes)
+        maximum = stack.max()
+        image_list = [i / maximum for i in image_list]
+        return image_list
 
     def get_contrast(self, gray_images):
         """
@@ -37,8 +42,8 @@ class QualityMeasures:
                                    borderType=cv2.BORDER_REFLECT101)
                      for g in gray_images]
         abs_laplacian = [np.absolute(l) for l in laplacian]
-        normed_lapl = [l / l.max() for l in abs_laplacian]
-        return normed_lapl
+        norm_laplacian = self.normalize_image_list(abs_laplacian)
+        return norm_laplacian
 
     def get_saturation(self, rgb_images):
         """
@@ -46,19 +51,29 @@ class QualityMeasures:
         Note: This returns a gray image with only one channel.
         """
         saturation = [np.std(i, axis=2) for i in rgb_images]
-        return saturation
+        norm_saturation = self.normalize_image_list(saturation)
+        return norm_saturation
 
     def get_exposedness(self, rgb_images, sigma=0.2):
         def weigh_intensities(image):
             weights = np.ones(shape=image.shape[0:2])
             for channel in range(3):
-                weights *= np.exp(-1 * ((image[:, :, channel] - 0.5) ** 2) / ((2 * sigma) ** 2))
+                weights *= np.exp(-1 * ((image[:, :, channel] - 0.5) ** 2) / (2 * (sigma ** 2)))
             return weights
 
         exposedness = [weigh_intensities(i) for i in rgb_images]
-        return exposedness
+        norm_exposedness = self.normalize_image_list(exposedness)
+        return norm_exposedness
 
     def compute_W(self, contrast, saturation, exposedness, w_con, w_sat, w_exp):
+        def replace_zeros(array):
+            array[array == 0] = 2 ** -149
+            return array
+
+        contrast = replace_zeros(contrast)
+        saturation = replace_zeros(saturation)
+        exposedness = replace_zeros(exposedness)
+
         W = (contrast ** w_con) * (saturation ** w_sat) * (exposedness ** w_exp)
         return W
 
@@ -70,13 +85,13 @@ class QualityMeasures:
                                       w_con,
                                       w_sat,
                                       w_exp) for i in range(len(contrast))]
-
         qm_stack = np.concatenate([i[..., np.newaxis] for i in weight_list], axis=2)
         inverted_weights = qm_stack.sum(axis=2) ** -1
 
         norm_weight_list = []
         for k in range(len(weight_list)):
-            norm_weight_list.append(inverted_weights * weight_list[k])
+            weights = np.uint8(inverted_weights * weight_list[k] * 255)
+            norm_weight_list.append(weights)
 
         return norm_weight_list
 
@@ -88,4 +103,5 @@ class QualityMeasures:
             results.append(output)
         result_stack = np.concatenate([i[..., np.newaxis] for i in results], axis=3)
         result = result_stack.sum(axis=3)
+        result = np.uint8(result / result.max() * 255)
         return result
