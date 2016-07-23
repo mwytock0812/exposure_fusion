@@ -3,22 +3,19 @@ import numpy as np
 
 
 class QualityMeasures:
-    def __init__(self, rgb_images, gray_images):
-        """Generates quality measures and weights from a list of float32 images.
-
-        The RGB image stack is concatenated along axis=3, while gray is
-        concatenated along axis=2.
+    def __init__(self, images):
+        """Generates quality measures and weights from a list of uint8 images.
         """
         # Consider checking number of channels
-        self.contrast = self.get_contrast(gray_images)
-        self.saturation = self.get_saturation(rgb_images)
-        self.exposedness = self.get_exposedness(rgb_images)
+        self.float_images = [np.float32(i) / 255 for i in images]
+        self.contrast = self.get_contrast(self.float_images)
+        self.saturation = self.get_saturation(self.float_images)
+        self.exposedness = self.get_exposedness(self.float_images)
 
         self.weights = self.get_weights(self.contrast,
                                         self.saturation,
                                         self.exposedness)
-
-        self.naive_result = self.get_result(self.weights, rgb_images)
+        self.naive_result = self.get_result(self.weights, images)
 
     def normalize_image_list(self, image_list):
         axes = len(image_list[0].shape)
@@ -27,7 +24,7 @@ class QualityMeasures:
         image_list = [i / maximum for i in image_list]
         return image_list
 
-    def get_contrast(self, gray_images):
+    def get_contrast(self, images):
         """
 
         Note: This returns a gray image with only one channel.
@@ -38,43 +35,35 @@ class QualityMeasures:
         #                            borderType=cv2.BORDER_REFLECT101)
         #              for gb in gaussian_blur]
 
-        laplacian = [cv2.Laplacian(g, ddepth=cv2.CV_32F, ksize=3,
-                                   borderType=cv2.BORDER_REFLECT101)
-                     for g in gray_images]
+        gray = [cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in images]
+        laplacian = [cv2.Laplacian(g, ddepth=cv2.CV_32F) for g in gray]
         abs_laplacian = [np.absolute(l) for l in laplacian]
         norm_laplacian = self.normalize_image_list(abs_laplacian)
-        return norm_laplacian
+        return abs_laplacian
 
-    def get_saturation(self, rgb_images):
+    def get_saturation(self, images):
         """
 
         Note: This returns a gray image with only one channel.
         """
-        saturation = [np.std(i, axis=2) for i in rgb_images]
+        saturation = [i.std(axis=2, dtype=np.float32) for i in images]
         norm_saturation = self.normalize_image_list(saturation)
-        return norm_saturation
+        return saturation
 
-    def get_exposedness(self, rgb_images, sigma=0.2):
+    def get_exposedness(self, images, sigma=0.2):
         def weigh_intensities(image):
-            weights = np.ones(shape=image.shape[0:2])
-            for channel in range(3):
-                weights *= np.exp(-1 * ((image[:, :, channel] - 0.5) ** 2) / (2 * (sigma ** 2)))
+            weights = np.prod(np.exp(-1 * ((image - 0.5) ** 2) / (2 * sigma)), axis=2, dtype=np.float32)
             return weights
 
-        exposedness = [weigh_intensities(i) for i in rgb_images]
+        exposedness = [weigh_intensities(i) for i in images]
         norm_exposedness = self.normalize_image_list(exposedness)
-        return norm_exposedness
+        return exposedness
 
     def compute_W(self, contrast, saturation, exposedness, w_con, w_sat, w_exp):
-        def replace_zeros(array):
-            array[array == 0] = 2 ** -149
-            return array
-
-        contrast = replace_zeros(contrast)
-        saturation = replace_zeros(saturation)
-        exposedness = replace_zeros(exposedness)
-
-        W = (contrast ** w_con) * (saturation ** w_sat) * (exposedness ** w_exp)
+        W_c = contrast ** w_con + 1
+        W_s = saturation ** w_sat + 1
+        W_e = exposedness ** w_exp + 1
+        W = W_c * W_s * W_e
         return W
 
     def get_weights(self, contrast, saturation, exposedness,
@@ -85,23 +74,26 @@ class QualityMeasures:
                                       w_con,
                                       w_sat,
                                       w_exp) for i in range(len(contrast))]
-        qm_stack = np.concatenate([i[..., np.newaxis] for i in weight_list], axis=2)
-        inverted_weights = qm_stack.sum(axis=2) ** -1
+        sum_weights = np.zeros(shape=weight_list[0].shape[:2], dtype=np.float32)
+        for weights in weight_list:
+            sum_weights += weights
+        nonzero = sum_weights > 0
 
         norm_weight_list = []
         for k in range(len(weight_list)):
-            weights = np.uint8(inverted_weights * weight_list[k] * 255)
-            norm_weight_list.append(weights)
+            weight_list[k][nonzero] /= sum_weights[nonzero]
+            norm_weight_list.append(np.uint8(weight_list[k] * 255))
 
         return norm_weight_list
 
     def get_result(self, weights, images):
-        results = []
+        weights = [np.float32(w) / 255 for w in weights]
+        weighted_results = []
         for i in range(len(images)):
-            output = np.zeros(shape=images[i].shape)
             output = weights[i][:, :, np.newaxis] * images[i]
-            results.append(output)
-        result_stack = np.concatenate([i[..., np.newaxis] for i in results], axis=3)
-        result = result_stack.sum(axis=3)
-        result = np.uint8(result / result.max() * 255)
+            weighted_results.append(output)
+        result = np.zeros(shape=images[i].shape, dtype=np.float32)
+        for i in range(len(weighted_results)):
+            result += weighted_results[i]
+        result = np.uint8(result)
         return result
