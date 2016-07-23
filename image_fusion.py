@@ -7,7 +7,7 @@ import ImageBlender as ib
 from glob import glob
 
 
-def readImages(image_dir, ext_list=[], resize=False, dtype="float32"):
+def readImages(image_dir, ext_list=[], resize=False):
     """ This function reads in input images from a image directory
 
     Args:
@@ -33,33 +33,28 @@ def readImages(image_dir, ext_list=[], resize=False, dtype="float32"):
               for f in image_files]
     if resize:
         images = [img[::4, ::4] for img in images]
-
-    if dtype == "float32":
-        float32_images = [i * 1./255 for i in images]
-        float32_images = [np.float32(i) for i in images]
-        return float32_images
-    else:
-        return images
+    return images
 
 
 if __name__ == "__main__":
     np.random.seed()
     image_dir = "input"
-    float32_rgb_images = readImages(image_dir, resize=False)
-    uint8_rgb_images = readImages(image_dir, resize=False, dtype="uint8")
-    gray_images = [cv2.cvtColor(i, cv2.COLOR_BGR2GRAY) for i in float32_rgb_images]
+    images = readImages(image_dir, resize=False)
 
-    rgb_stack = np.concatenate([i[..., np.newaxis] for i in float32_rgb_images], axis=3)
-    gray_stack = np.concatenate([g[..., np.newaxis] for g in gray_images], axis=2)
+    quality = qm.QualityMeasures(images)
 
-    quality = qm.QualityMeasures(float32_rgb_images, gray_images)
+    blend = ib.ImageBlender(images, quality.weights)
 
-    # Use uint8 images instead
-    blend = ib.ImageBlender(uint8_rgb_images, quality.weights)
-
-    import pdb
-    pdb.set_trace()
     # fused = np.median(rgb_stack, axis=3)
     # grayscale = cv2.cvtColor(fused, cv2.COLOR_BGR2GRAY)
-    # cv2.imwrite("fused.jpg", fused)
+    #cv2.imwrite("contrast.jpg", quality.contrast)
+    #cv2.imwrite("saturation.jpg", quality.saturation)
+    #cv2.imwrite("exposedness.jpg", quality.exposedness)
+    counter = 0
+    for weight in quality.weights:
+        cv2.imwrite("weight_map%s.jpg" % counter, weight)
+        counter += 1
+
+    cv2.imwrite("naive_result.jpg", quality.naive_result)
+    cv2.imwrite("fused.jpg", blend.final)
     # cv2.imwrite("grayscale.jpg", grayscale)
