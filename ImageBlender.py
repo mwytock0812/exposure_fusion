@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import scipy.signal
 
 
 class ImageBlender:
@@ -9,7 +10,8 @@ class ImageBlender:
         self.gaussian_pyr_weights = self.gaussian_pyramid(weights)
         self.blended_pyramid = self.blend(self.gaussian_pyr_weights,
                                           self.laplacian_pyr_images)
-        self.final_blend = self.collapse(self.blended_pyramid)
+        self.collapsed = self.collapse(self.blended_pyramid)
+        self.final = self.convert_final_image(self.collapsed)
 
     def fix_dimensions(self, images):
         """Ensures even-numbered dimensions."""
@@ -28,7 +30,7 @@ class ImageBlender:
             fixed.append(image)
         return fixed
 
-    def gaussian_pyramid(self, images, levels=3):
+    def gaussian_pyramid(self, images, levels=1):
         """Constructs a set of Gaussian pyramids.
         images: List of images.
         level: Integer number of levels to include in the pyramid.
@@ -69,19 +71,30 @@ class ImageBlender:
             laplacian_pyramids.append(laplacian_pyramid[::-1])
         return laplacian_pyramids
 
+    def convert_to_float(self, pyramids):
+        output = []
+        for pyramid in pyramids:
+            levels = []
+            for level in pyramid:
+                levels.append(np.float32(level))
+            output.append(pyramid)
+        return output
+
     def blend(self, gauss_pyr_weights, lapl_pyr_images):
+        gauss_pyr_weights = self.convert_to_float(gauss_pyr_weights)
+        lapl_pyr_images = self.convert_to_float(lapl_pyr_images)
         num_images = len(gauss_pyr_weights)
         num_levels = len(gauss_pyr_weights[0])
         result_pyramid = []
+        # Revise code in this function
         for l in range(num_levels):
-            level = []
+            level = np.zeros(lapl_pyr_images[0][l].shape, dtype=np.uint8)
             for i in range(num_images):
-                level.append(gauss_pyr_weights[i][l][..., np.newaxis] * lapl_pyr_images[i][l])
-            level_stack = np.concatenate([i[..., np.newaxis] for i in level], axis=3)
-            result = level_stack.sum(axis=3)
-            result[result > 255] = 255
-            result = np.uint8(result)
-            result_pyramid.append(result)
+                gauss_pyr = gauss_pyr_weights[i][l] / 255.
+                gp = np.dstack((gauss_pyr, gauss_pyr, gauss_pyr))
+                lp_gp = cv2.multiply(lapl_pyr_images[i][l], gp, dtype=cv2.CV_8UC3)
+                level = cv2.add(level, lp_gp)
+            result_pyramid.append(level)
         return result_pyramid
 
     def collapse(self, pyramid):
@@ -89,10 +102,38 @@ class ImageBlender:
         if len(pyramid) == 1:
             return pyramid[0]
         image = pyramid.pop()
-        expanded = cv2.pyrUp(image)
+        expanded = expand(image)
         if expanded.shape[0] > pyramid[-1].shape[0]:
             expanded = expanded[:-1, :]
         if expanded.shape[1] > pyramid[-1].shape[1]:
             expanded = expanded[:, :-1]
-            pyramid[-1] = pyramid[-1] + expanded
+        pyramid[-1] = pyramid[-1] + expanded
         return self.collapse(pyramid)
+
+    def convert_final_image(self, image):
+        return np.uint8(image / image.max() * 255)
+
+def expand(image):
+    # WRITE YOUR CODE HERE.
+    upsampled = np.zeros(shape=(image.shape[0] * 2, image.shape[1] * 2, 3), dtype=np.float32)
+    for c in range(3):
+        upsampled[::2, ::2, c] = image[:, :, c]
+        kernel = generatingKernel(0.4)
+        upsampled[:, :, c] = scipy.signal.convolve2d(upsampled[:, :, c], kernel, 'same') * 4
+    return upsampled
+
+def generatingKernel(parameter):
+    """ Return a 5x5 generating kernel based on an input parameter.
+
+    Note: This function is provided for you, do not change it.
+
+    Args:
+      parameter (float): Range of value: [0, 1].
+
+    Returns:
+      numpy.ndarray: A 5x5
+
+    """
+    kernel = np.array([0.25 - parameter / 2.0, 0.25, parameter,
+                       0.25, 0.25 - parameter /2.0])
+    return np.outer(kernel, kernel)
