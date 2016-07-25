@@ -55,6 +55,10 @@ if __name__ == "__main__":
         cv2.imwrite("weight_map%s.jpg" % counter, weight)
         counter += 1
 
+    cv2.imwrite("contrast.jpg", np.uint8(quality.contrast[0] / quality.contrast[0].max() * 255))
+    cv2.imwrite("saturation.jpg", np.uint8(quality.saturation[0] / quality.saturation[0].max() * 255))
+    cv2.imwrite("exposedness.jpg", np.uint8(quality.exposedness[0] / quality.exposedness[0].max() * 255))
+
     cv2.imwrite("naive_result.jpg", quality.naive_result)
     cv2.imwrite("fused.jpg", blend.final)
     # cv2.imwrite("grayscale.jpg", grayscale)

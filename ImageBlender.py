@@ -30,7 +30,7 @@ class ImageBlender:
             fixed.append(image)
         return fixed
 
-    def gaussian_pyramid(self, images, levels=1):
+    def gaussian_pyramid(self, images, levels=3):
         """Constructs a set of Gaussian pyramids.
         images: List of images.
         level: Integer number of levels to include in the pyramid.
@@ -86,7 +86,6 @@ class ImageBlender:
         num_images = len(gauss_pyr_weights)
         num_levels = len(gauss_pyr_weights[0])
         result_pyramid = []
-        # Revise code in this function
         for l in range(num_levels):
             level = np.zeros(lapl_pyr_images[0][l].shape, dtype=np.uint8)
             for i in range(num_images):
@@ -114,7 +113,6 @@ class ImageBlender:
         return np.uint8(image / image.max() * 255)
 
 def expand(image):
-    # WRITE YOUR CODE HERE.
     upsampled = np.zeros(shape=(image.shape[0] * 2, image.shape[1] * 2, 3), dtype=np.float32)
     for c in range(3):
         upsampled[::2, ::2, c] = image[:, :, c]
